@@ -21,93 +21,128 @@
 #include <sys/wait.h>
 #include "Subs_Reads.h"
 
+/*	Variables Globales	*/
+int maxfd;
+fd_set	lista_clientes;
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+/*	Funcion de manejo de señal	*/
 static void sigchld_hdl (int sig)
 {
 	int stat;
+	pid_t pid;
+	while ((pid = waitpid(-1, &stat, WNOHANG)) > 0){
 
-	waitpid(-1, &stat,0);
-
-	printf("Murio el socket: %d\n",stat);
+	printf("Conexión finalizada en socket: %d\n",WEXITSTATUS(stat));
+	pthread_mutex_lock(&lock);
+		FD_CLR(WEXITSTATUS(stat),&lista_clientes);
+		close(WEXITSTATUS(stat));
+	pthread_mutex_unlock(&lock);
+	}
 }
 
-
-void* hiloLector(void ){
-
-	int ctrl = 0;
-	int delta_sec;
-	int delta_mil;
-	int prev_secouot = 0;
-	int prev_milout = 0;
-	struct timeval tv;
-
-	typedef	struct	sub_struct
-	{
-		char linea[5];
-		int sec_in;
-		int sec_out;
-		int mill_in;
-		int mill_out;
-		char Text[512];
-	} sub_struct;
-
-	sub_struct Current_Line;
-
-	FILE* sub;
-	char path[]	=	"subs.srt";
-	sub		=	fopen(path,"r");
-	if(sub == NULL)
-	{
-		printf("Error de apertura de subtitulos.\n");
-		return NULL;
-	}
-
+void* hiloLector(void)
+{
+	int j;
 	while(1)
 	{
-		/*	Rutina de Lectura	*/
-
-		ctrl = leerSubs( sub, (Current_Line.Text), &(Current_Line.sec_in),
-								&(Current_Line.sec_out),&(Current_Line.mill_in),
-								&(Current_Line.mill_out),(Current_Line.linea));
-		if(ctrl != 0)
+		sleep(1);
+		pthread_mutex_lock(&lock);
+		for(j = 4; j <= maxfd; j++)
 		{
-			printf("  Error de Lectura de subtitulos.\n");
+			if (FD_ISSET(j, &lista_clientes))
+			{
+
+				if (send(j, "Hola a todos\n", 13, 0) == -1)
+				{
+					printf("Error al enviar mensajes.\n");
+					return NULL;
+				}
+			}
 		}
-
-		delta_sec = Current_Line.sec_in - prev_secouot;
-		delta_mil = Current_Line.mill_in - prev_milout;
-		if(delta_mil < 0)
-		{
-			delta_sec--;
-			delta_mil += 1000;
-		}
-
-		tv.tv_sec = delta_sec;
-		tv.tv_usec = delta_mil * 1000;
-
-		/*	Espero a al tiempo de entrada del subtitulo	*/
-		select(0,NULL,NULL,NULL,&tv);
-
-		printf("%s",Current_Line.Text);
-
-		prev_secouot	=	Current_Line.sec_out ;
-		prev_milout		= 	Current_Line.mill_out;
-
-		delta_sec = Current_Line.sec_out - Current_Line.sec_in;
-		delta_mil = Current_Line.mill_out - Current_Line.mill_in;
-		if(delta_mil < 0)
-		{
-			delta_sec--;
-			delta_mil += 1000;
-		}
-
-		tv.tv_sec = delta_sec;
-		tv.tv_usec = delta_mil * 1000;
-
-		select(0,NULL,NULL,NULL,&tv);
-		printf("\n\n\n\n");
+		pthread_mutex_unlock(&lock);
 	}
 	return NULL;
 }
+
+//void* hiloLector(void ){
+//
+//	int ctrl = 0;
+//	int delta_sec;
+//	int delta_mil;
+//	int prev_secouot = 0;
+//	int prev_milout = 0;
+//	struct timeval tv;
+//
+//	typedef	struct	sub_struct
+//	{
+//		char linea[5];
+//		int sec_in;
+//		int sec_out;
+//		int mill_in;
+//		int mill_out;
+//		char Text[512];
+//	} sub_struct;
+//
+//	sub_struct Current_Line;
+//
+//	FILE* sub;
+//	char path[]	=	"subs.srt";
+//	sub		=	fopen(path,"r");
+//	if(sub == NULL)
+//	{
+//		printf("Error de apertura de subtitulos.\n");
+//		return NULL;
+//	}
+//
+//	while(1)
+//	{
+//		/*	Rutina de Lectura	*/
+//
+//		ctrl = leerSubs( sub, (Current_Line.Text), &(Current_Line.sec_in),
+//								&(Current_Line.sec_out),&(Current_Line.mill_in),
+//								&(Current_Line.mill_out),(Current_Line.linea));
+//		if(ctrl != 0)
+//		{
+//			printf("  Error de Lectura de subtitulos.\n");
+//		}
+//
+//		delta_sec = Current_Line.sec_in - prev_secouot;
+//		delta_mil = Current_Line.mill_in - prev_milout;
+//		if(delta_mil < 0)
+//		{
+//			delta_sec--;
+//			delta_mil += 1000;
+//		}
+//
+//		tv.tv_sec = delta_sec;
+//		tv.tv_usec = delta_mil * 1000;
+//
+//		/*	Espero a al tiempo de entrada del subtitulo	*/
+//		select(0,NULL,NULL,NULL,&tv);
+//
+//		printf("%s",Current_Line.Text);
+//
+//		prev_secouot	=	Current_Line.sec_out ;
+//		prev_milout		= 	Current_Line.mill_out;
+//
+//		delta_sec = Current_Line.sec_out - Current_Line.sec_in;
+//		delta_mil = Current_Line.mill_out - Current_Line.mill_in;
+//		if(delta_mil < 0)
+//		{
+//			delta_sec--;
+//			delta_mil += 1000;
+//		}
+//
+//		tv.tv_sec = delta_sec;
+//		tv.tv_usec = delta_mil * 1000;
+//
+//		select(0,NULL,NULL,NULL,&tv);
+//		printf("\n\n\n\n");
+//	}
+//	return NULL;
+//}
 
 int main(int argc, char *argv[])
 {
@@ -166,10 +201,12 @@ int main(int argc, char *argv[])
 	ctrl = listen(sock_srv,10);
 
 	/*	configuro el select	*/
-	int maxfd = sock_srv;
-	fd_set	lista_clientes;
 
+	maxfd = sock_srv;
 	FD_ZERO(&lista_clientes);
+
+	pthread_t hilo_Lect;
+	pthread_create(&hilo_Lect,NULL,(void*)&hiloLector,NULL);
 
 	while (1)
 	{
@@ -185,12 +222,14 @@ int main(int argc, char *argv[])
 				,inet_ntop(AF_INET,&(client_info.sin_addr),clientIP, INET_ADDRSTRLEN)
 				,nuevofd);
 
+		pthread_mutex_lock(&lock);
 		if(nuevofd > maxfd)
 		{
 			maxfd = nuevofd;
 		}
 
 		FD_SET(nuevofd,&lista_clientes);
+		pthread_mutex_unlock(&lock);
 
 		if(fork() == 0)
 		{	/*	Procesos hijo, administran conexiones	*/
@@ -215,7 +254,6 @@ int main(int argc, char *argv[])
 				{
 					char test[15]="";
 					ctrl = read(nuevofd,test,15);
-					printf("Vive %d...%d\n",nuevofd,ctrl);
 				}
 				else
 				{
@@ -223,16 +261,14 @@ int main(int argc, char *argv[])
 				}
 
 			}
-			printf("Murio %d...\n",nuevofd);
 			return nuevofd;
 		}
 		else
 		{
-			//close(nuevofd);
+
 		}
 
 	}
-	//pthread_t hilo_Lect;
-	//pthread_create(&hilo_Lect,NULL,(void*)&hiloLector,NULL);
+
 	return 0;
 }
