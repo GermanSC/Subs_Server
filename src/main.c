@@ -42,19 +42,98 @@ static void sigchld_hdl (int sig)
 	}
 }
 
-void* hiloLector(void)
-{
+void* hiloLector(void ){
+
+	int ctrl = 0;
 	int j;
+	int delta_sec;
+	int delta_mil;
+	int prev_secouot = 0;
+	int prev_milout = 0;
+	struct timeval tv;
+
+	typedef	struct	sub_struct
+	{
+		char linea[5];
+		int sec_in;
+		int sec_out;
+		int mill_in;
+		int mill_out;
+		char Text[512];
+	} sub_struct;
+
+	sub_struct Current_Line;
+
+	FILE* sub;
+	char path[]	=	"subs.srt";
+	sub		=	fopen(path,"r");
+	if(sub == NULL)
+	{
+		printf("Error de apertura de subtitulos.\n");
+		return NULL;
+	}
+
 	while(1)
 	{
-		sleep(1);
+		/*	Rutina de Lectura	*/
+
+		ctrl = leerSubs( sub, (Current_Line.Text), &(Current_Line.sec_in),
+								&(Current_Line.sec_out),&(Current_Line.mill_in),
+								&(Current_Line.mill_out),(Current_Line.linea));
+		if(ctrl != 0)
+		{
+			printf("  Error de Lectura de subtitulos.\n");
+		}
+
+		delta_sec = Current_Line.sec_in - prev_secouot;
+		delta_mil = Current_Line.mill_in - prev_milout;
+		if(delta_mil < 0)
+		{
+			delta_sec--;
+			delta_mil += 1000;
+		}
+
+		tv.tv_sec = delta_sec;
+		tv.tv_usec = delta_mil * 1000;
+
+		/*	Espero a al tiempo de entrada del subtitulo	*/
+		select(0,NULL,NULL,NULL,&tv);
+
 		pthread_mutex_lock(&lock);
 		for(j = 4; j <= maxfd; j++)
 		{
 			if (FD_ISSET(j, &lista_clientes))
 			{
+				if (send(j, Current_Line.Text, strlen(Current_Line.Text), 0) == -1)
+				{
+					printf("Error al enviar mensajes.\n");
+					return NULL;
+				}
+			}
+		}
+		pthread_mutex_unlock(&lock);
 
-				if (send(j, "Hola a todos\n", 13, 0) == -1)
+		prev_secouot	=	Current_Line.sec_out ;
+		prev_milout		= 	Current_Line.mill_out;
+
+		delta_sec = Current_Line.sec_out - Current_Line.sec_in;
+		delta_mil = Current_Line.mill_out - Current_Line.mill_in;
+		if(delta_mil < 0)
+		{
+			delta_sec--;
+			delta_mil += 1000;
+		}
+
+		tv.tv_sec = delta_sec;
+		tv.tv_usec = delta_mil * 1000;
+
+		select(0,NULL,NULL,NULL,&tv);
+		pthread_mutex_lock(&lock);
+		for(j = 4; j <= maxfd; j++)
+		{
+			if (FD_ISSET(j, &lista_clientes))
+			{
+				if (send(j,"\n\n\n\n\n", 5, 0) == -1)
 				{
 					printf("Error al enviar mensajes.\n");
 					return NULL;
@@ -65,84 +144,6 @@ void* hiloLector(void)
 	}
 	return NULL;
 }
-
-//void* hiloLector(void ){
-//
-//	int ctrl = 0;
-//	int delta_sec;
-//	int delta_mil;
-//	int prev_secouot = 0;
-//	int prev_milout = 0;
-//	struct timeval tv;
-//
-//	typedef	struct	sub_struct
-//	{
-//		char linea[5];
-//		int sec_in;
-//		int sec_out;
-//		int mill_in;
-//		int mill_out;
-//		char Text[512];
-//	} sub_struct;
-//
-//	sub_struct Current_Line;
-//
-//	FILE* sub;
-//	char path[]	=	"subs.srt";
-//	sub		=	fopen(path,"r");
-//	if(sub == NULL)
-//	{
-//		printf("Error de apertura de subtitulos.\n");
-//		return NULL;
-//	}
-//
-//	while(1)
-//	{
-//		/*	Rutina de Lectura	*/
-//
-//		ctrl = leerSubs( sub, (Current_Line.Text), &(Current_Line.sec_in),
-//								&(Current_Line.sec_out),&(Current_Line.mill_in),
-//								&(Current_Line.mill_out),(Current_Line.linea));
-//		if(ctrl != 0)
-//		{
-//			printf("  Error de Lectura de subtitulos.\n");
-//		}
-//
-//		delta_sec = Current_Line.sec_in - prev_secouot;
-//		delta_mil = Current_Line.mill_in - prev_milout;
-//		if(delta_mil < 0)
-//		{
-//			delta_sec--;
-//			delta_mil += 1000;
-//		}
-//
-//		tv.tv_sec = delta_sec;
-//		tv.tv_usec = delta_mil * 1000;
-//
-//		/*	Espero a al tiempo de entrada del subtitulo	*/
-//		select(0,NULL,NULL,NULL,&tv);
-//
-//		printf("%s",Current_Line.Text);
-//
-//		prev_secouot	=	Current_Line.sec_out ;
-//		prev_milout		= 	Current_Line.mill_out;
-//
-//		delta_sec = Current_Line.sec_out - Current_Line.sec_in;
-//		delta_mil = Current_Line.mill_out - Current_Line.mill_in;
-//		if(delta_mil < 0)
-//		{
-//			delta_sec--;
-//			delta_mil += 1000;
-//		}
-//
-//		tv.tv_sec = delta_sec;
-//		tv.tv_usec = delta_mil * 1000;
-//
-//		select(0,NULL,NULL,NULL,&tv);
-//		printf("\n\n\n\n");
-//	}
-//	return NULL;
-//}
 
 int main(int argc, char *argv[])
 {
