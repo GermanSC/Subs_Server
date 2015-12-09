@@ -73,15 +73,13 @@ void* hiloLector(void ){
 	sub		=	fopen(path,"r");
 	if(sub == NULL)
 	{
-		printf("Error de apertura de subtitulos.\n");
+		printf("Error de apertura de subtitulos.\n\n");
 		pthread_mutex_lock(&EOF_lock);
 		EOF_FLAG = 1;
 		pthread_mutex_unlock(&EOF_lock);
 		return NULL;
 	}
-
 	sleep (2);
-
 	while(1)
 	{
 		/*	Rutina de Lectura	*/
@@ -91,7 +89,7 @@ void* hiloLector(void ){
 								&(Current_Line.mill_out),(Current_Line.linea));
 		if(ctrl == -10)
 		{
-			printf(" Fin de archivo.\n");
+			printf("> Fin de archivo.\n");
 			sleep(1);
 			pthread_mutex_lock(&lock);
 			for(j = 4; j <= maxfd; j++)
@@ -100,7 +98,7 @@ void* hiloLector(void ){
 				{
 					if (send(j, "SSCMD_ENDOFFILE\n", 16, 0) == -1)
 					{
-						printf("Error al enviar mensajes.\n");
+						printf("Error al enviar mensajes.\n\n");
 						pthread_mutex_lock(&EOF_lock);
 						EOF_FLAG = 1;
 						pthread_mutex_unlock(&EOF_lock);
@@ -137,7 +135,7 @@ void* hiloLector(void ){
 			{
 				if (send(j, Current_Line.Text, strlen(Current_Line.Text), 0) == -1)
 				{
-					printf("Error al enviar mensajes.\n");
+					printf("Error al enviar mensajes.\n\n");
 					pthread_mutex_lock(&EOF_lock);
 					EOF_FLAG = 1;
 					pthread_mutex_unlock(&EOF_lock);
@@ -169,7 +167,7 @@ void* hiloLector(void ){
 			{
 				if (send(j,"\n\n\n\n\n", 5, 0) == -1)
 				{
-					printf("Error al enviar mensajes.\n");
+					printf("Error al enviar mensajes.\n\n");
 					pthread_mutex_lock(&EOF_lock);
 					EOF_FLAG = 1;
 					pthread_mutex_unlock(&EOF_lock);
@@ -205,8 +203,8 @@ int main(int argc, char *argv[])
 
 	if (sigaction(SIGCHLD, &act, 0))
 	{
-		perror ("sigaction");
-		return 1;
+		printf("Error de sigaction.\n\n");
+		return -1;
 	}
 
 	/*	Seteo del socket	*/
@@ -214,7 +212,7 @@ int main(int argc, char *argv[])
 	sock_srv = socket(PF_INET,SOCK_STREAM,0);
 	if( sock_srv < 0 )	/*	Error de socket	*/
 	{
-		printf("Error en lla apertura del socket.\n\n");
+		printf("Error en la apertura del socket.\n\n");
 		return -1;
 	}
 
@@ -244,20 +242,21 @@ int main(int argc, char *argv[])
 
 	pthread_t hilo_Lect;
 	pthread_create(&hilo_Lect,NULL,(void*)&hiloLector,NULL);
+	sleep(1);
 
 	/*	Accept timeout	*/
 	struct timeval acctv;
 	fd_set Listen;
 
 	/*	Comunicacion con los hijos	*/
-
+	pthread_mutex_lock(&EOF_lock);
 	while (EOF_FLAG == 0)
 	{
 		pthread_mutex_unlock(&EOF_lock);
 		FD_SET(sock_srv,&Listen);
 		acctv.tv_sec = 1;
 		select(sock_srv+1,&Listen,NULL,NULL,&acctv);
-		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0)
+		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0 && EOF_FLAG == 0)
 		{	/*	Nueva conexión	*/
 			nuevofd = accept(sock_srv,(struct sockaddr *)&client_info,&client_len);
 			if(nuevofd < 0)
@@ -320,7 +319,7 @@ int main(int argc, char *argv[])
 		}
 		/*	Timeout del select	*/
 		SCH_FLAG = 0;
-		pthread_mutex_lock(&EOF_lock);
+
 	}
 	printf("Cerrando servidor y conexiones restantes.\n");
 	sleep(1);
