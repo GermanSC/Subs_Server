@@ -259,7 +259,6 @@ int main(int argc, char *argv[])
 		select(sock_srv+1,&Listen,NULL,NULL,&acctv);
 		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0)
 		{	/*	Nueva conexión	*/
-			printf("Entro a accept EOF: %d\n",EOF_FLAG);
 			nuevofd = accept(sock_srv,(struct sockaddr *)&client_info,&client_len);
 			if(nuevofd < 0)
 			{
