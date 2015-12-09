@@ -26,6 +26,7 @@ int maxfd;
 fd_set	lista_clientes;
 int EOF_FLAG = 0;
 int SCH_FLAG = 0;
+char path[40] = "";
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t EOF_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -69,11 +70,10 @@ void* hiloLector(void ){
 	sub_struct Current_Line;
 
 	FILE* sub;
-	char path[]	=	"subs.srt";
 	sub		=	fopen(path,"r");
 	if(sub == NULL)
 	{
-		printf("Error de apertura de subtitulos.\n\n");
+		printf("Error de apertura de subtitulos (Ruta especificada: %s).\n\n", path);
 		pthread_mutex_lock(&EOF_lock);
 		EOF_FLAG = 1;
 		pthread_mutex_unlock(&EOF_lock);
@@ -194,6 +194,12 @@ int main(int argc, char *argv[])
 	unsigned int client_len = sizeof(struct sockaddr_in);
 	char clientIP[INET_ADDRSTRLEN];
 
+	if(argc < 2)
+	{
+		printf("usage: %s [ruta al archivo srt a transmitir]\n\n",argv[0]);
+		return -1;
+	}
+
 	/*	Seteo el manejo de señal de hijo terminado	*/
 
 	struct sigaction act;
@@ -240,6 +246,7 @@ int main(int argc, char *argv[])
 	maxfd = sock_srv;
 	FD_ZERO(&lista_clientes);
 
+	strcpy(path,argv[1]);
 	pthread_t hilo_Lect;
 	pthread_create(&hilo_Lect,NULL,(void*)&hiloLector,NULL);
 	sleep(1);
@@ -256,6 +263,7 @@ int main(int argc, char *argv[])
 		FD_SET(sock_srv,&Listen);
 		acctv.tv_sec = 1;
 		select(sock_srv+1,&Listen,NULL,NULL,&acctv);
+		pthread_mutex_lock(&EOF_lock);
 		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0 && EOF_FLAG == 0)
 		{	/*	Nueva conexión	*/
 			nuevofd = accept(sock_srv,(struct sockaddr *)&client_info,&client_len);
@@ -292,7 +300,7 @@ int main(int argc, char *argv[])
 				sleep(1);
 
 				ctrl = 1;
-				char test[15]="";
+				char test[13]="";
 				while(ctrl > 0)
 				{
 					timeout.tv_sec = 4;
@@ -301,7 +309,7 @@ int main(int argc, char *argv[])
 					select(nuevofd+1,&readfd,NULL,NULL,&timeout);
 					if(FD_ISSET(nuevofd,&readfd))
 					{
-						ctrl = read(nuevofd,test,15);
+						ctrl = read(nuevofd,test,13);
 					}
 					else
 					{
