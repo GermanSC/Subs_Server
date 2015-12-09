@@ -10,7 +10,7 @@
 
 int	leerSubs( FILE * file, char* TEXT, int* SEC_IN, int* SEC_OUT, int* MIL_IN, int* MIL_OUT,  char* LINE)
 {
-
+	char* read_ctrl;
 	int hs_o, min_o, seg_o;
 	int hs_i, min_i, seg_i;
 
@@ -25,11 +25,17 @@ int	leerSubs( FILE * file, char* TEXT, int* SEC_IN, int* SEC_OUT, int* MIL_IN, i
 
 	char aux_line[100] = "";
 	fgets(aux_line,100,file);
-	while(strcmp(aux_line,"")!=13)
+	while(strcmp(aux_line,"")!=13 && read_ctrl != NULL )
 	{
 		strcat(TEXT,aux_line);
-		fgets(aux_line,100,file);
+		read_ctrl = fgets(aux_line,100,file);
 	}
+
+	if(read_ctrl == NULL)
+	{
+		return -10;
+	}
+
 	/*	Calculo de segundos.	*/
 
 	*SEC_IN = hs_i*3600+min_i*60+seg_i;

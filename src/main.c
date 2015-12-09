@@ -24,14 +24,17 @@
 /*	Variables Globales	*/
 int maxfd;
 fd_set	lista_clientes;
+int EOF_FLAG = 0;
+int SCH_FLAG = 0;
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t EOF_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*	Funcion de manejo de señal	*/
 static void sigchld_hdl (int sig)
 {
 	int stat;
-	pid_t pid;
+	pid_t pid = 0;
 	while ((pid = waitpid(-1, &stat, WNOHANG)) > 0){
 
 	printf("Conexión finalizada en socket: %d\n",WEXITSTATUS(stat));
@@ -40,6 +43,7 @@ static void sigchld_hdl (int sig)
 		close(WEXITSTATUS(stat));
 	pthread_mutex_unlock(&lock);
 	}
+	SCH_FLAG = 1;
 }
 
 void* hiloLector(void ){
@@ -70,8 +74,13 @@ void* hiloLector(void ){
 	if(sub == NULL)
 	{
 		printf("Error de apertura de subtitulos.\n");
+		pthread_mutex_lock(&EOF_lock);
+		EOF_FLAG = 1;
+		pthread_mutex_unlock(&EOF_lock);
 		return NULL;
 	}
+
+	sleep (2);
 
 	while(1)
 	{
@@ -80,9 +89,31 @@ void* hiloLector(void ){
 		ctrl = leerSubs( sub, (Current_Line.Text), &(Current_Line.sec_in),
 								&(Current_Line.sec_out),&(Current_Line.mill_in),
 								&(Current_Line.mill_out),(Current_Line.linea));
-		if(ctrl != 0)
+		if(ctrl == -10)
 		{
-			printf("  Error de Lectura de subtitulos.\n");
+			printf(" Fin de archivo.\n");
+			sleep(1);
+			pthread_mutex_lock(&lock);
+			for(j = 4; j <= maxfd; j++)
+			{
+				if (FD_ISSET(j, &lista_clientes))
+				{
+					if (send(j, "SSCMD_ENDOFFILE\n", 16, 0) == -1)
+					{
+						printf("Error al enviar mensajes.\n");
+						pthread_mutex_lock(&EOF_lock);
+						EOF_FLAG = 1;
+						pthread_mutex_unlock(&EOF_lock);
+						return NULL;
+					}
+				}
+			}
+			pthread_mutex_unlock(&lock);
+
+			pthread_mutex_lock(&EOF_lock);
+			EOF_FLAG = 1;
+			pthread_mutex_unlock(&EOF_lock);
+			return NULL;
 		}
 
 		delta_sec = Current_Line.sec_in - prev_secouot;
@@ -107,6 +138,9 @@ void* hiloLector(void ){
 				if (send(j, Current_Line.Text, strlen(Current_Line.Text), 0) == -1)
 				{
 					printf("Error al enviar mensajes.\n");
+					pthread_mutex_lock(&EOF_lock);
+					EOF_FLAG = 1;
+					pthread_mutex_unlock(&EOF_lock);
 					return NULL;
 				}
 			}
@@ -136,6 +170,9 @@ void* hiloLector(void ){
 				if (send(j,"\n\n\n\n\n", 5, 0) == -1)
 				{
 					printf("Error al enviar mensajes.\n");
+					pthread_mutex_lock(&EOF_lock);
+					EOF_FLAG = 1;
+					pthread_mutex_unlock(&EOF_lock);
 					return NULL;
 				}
 			}
@@ -165,7 +202,6 @@ int main(int argc, char *argv[])
 
 	memset (&act, 0, sizeof(act));
 	act.sa_handler = sigchld_hdl;
-	act.sa_flags = SA_RESTART;
 
 	if (sigaction(SIGCHLD, &act, 0))
 	{
@@ -187,7 +223,7 @@ int main(int argc, char *argv[])
 
 	srv_addr.sin_family		= AF_INET;
 	srv_addr.sin_port		= htons(port);
-	srv_addr.sin_addr.s_addr	= 0;
+	srv_addr.sin_addr.s_addr= 0;
 
 	ctrl = bind(sock_srv,(struct sockaddr*)&srv_addr,sizeof (struct sockaddr_in));
 	if(ctrl == -1)	/*	Error del bind	*/
@@ -209,67 +245,89 @@ int main(int argc, char *argv[])
 	pthread_t hilo_Lect;
 	pthread_create(&hilo_Lect,NULL,(void*)&hiloLector,NULL);
 
-	while (1)
+	/*	Accept timeout	*/
+	struct timeval acctv;
+	fd_set Listen;
+
+	/*	Comunicacion con los hijos	*/
+
+	while (EOF_FLAG == 0)
 	{
-		nuevofd = accept(sock_srv,(struct sockaddr *)&client_info,&client_len);
-		if(nuevofd < 0)
-		{
-			printf("Error al aceptar la conexión.\n\n");
-			close(sock_srv);
-			return -1;
-		}
-
-		printf("Nueva conexión desde: %s asignada a socket: %d\n"
-				,inet_ntop(AF_INET,&(client_info.sin_addr),clientIP, INET_ADDRSTRLEN)
-				,nuevofd);
-
-		pthread_mutex_lock(&lock);
-		if(nuevofd > maxfd)
-		{
-			maxfd = nuevofd;
-		}
-
-		FD_SET(nuevofd,&lista_clientes);
-		pthread_mutex_unlock(&lock);
-
-		if(fork() == 0)
-		{	/*	Procesos hijo, administran conexiones	*/
-			fd_set readfd;
-			FD_ZERO(&readfd);
-			FD_SET(nuevofd,&readfd);
-			struct timeval timeout;
-			timeout.tv_sec = 4;
-			timeout.tv_usec = 0;
-
-			close(sock_srv);
-			write(nuevofd,"RDY_CMD",7);
-			sleep(1);
-			ctrl = 1;
-			while(ctrl > 0)
+		pthread_mutex_unlock(&EOF_lock);
+		FD_SET(sock_srv,&Listen);
+		acctv.tv_sec = 1;
+		select(sock_srv+1,&Listen,NULL,NULL,&acctv);
+		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0)
+		{	/*	Nueva conexión	*/
+			printf("Entro a accept EOF: %d\n",EOF_FLAG);
+			nuevofd = accept(sock_srv,(struct sockaddr *)&client_info,&client_len);
+			if(nuevofd < 0)
 			{
+				printf("Error al aceptar la conexión.\n\n");
+				close(sock_srv);
+				return -1;
+			}
+
+			printf("Nueva conexión desde: %s asignada a socket: %d\n"
+					,inet_ntop(AF_INET,&(client_info.sin_addr),clientIP, INET_ADDRSTRLEN)
+					,nuevofd);
+
+			pthread_mutex_lock(&lock);
+			if(nuevofd > maxfd)
+			{
+				maxfd = nuevofd;
+			}
+			FD_SET(nuevofd,&lista_clientes);
+			pthread_mutex_unlock(&lock);
+
+			if(fork() == 0)
+			{	/*	Procesos hijo, administran conexiones	*/
+				fd_set readfd;
+				FD_ZERO(&readfd);
+				FD_SET(nuevofd,&readfd);
+				struct timeval timeout;
 				timeout.tv_sec = 4;
 				timeout.tv_usec = 0;
-				FD_SET(nuevofd,&readfd);
-				select(nuevofd+1,&readfd,NULL,NULL,&timeout);
-				if(FD_ISSET(nuevofd,&readfd))
-				{
-					char test[15]="";
-					ctrl = read(nuevofd,test,15);
-				}
-				else
-				{
-					break;
-				}
 
+				close(sock_srv);
+				write(nuevofd,"RDY_CMD",7);
+				sleep(1);
+
+				ctrl = 1;
+				char test[15]="";
+				while(ctrl > 0)
+				{
+					timeout.tv_sec = 4;
+					timeout.tv_usec = 0;
+					FD_SET(nuevofd,&readfd);
+					select(nuevofd+1,&readfd,NULL,NULL,&timeout);
+					if(FD_ISSET(nuevofd,&readfd))
+					{
+						ctrl = read(nuevofd,test,15);
+					}
+					else
+					{
+						break;
+					}
+				}
+				close(nuevofd);
+				return nuevofd;
 			}
-			return nuevofd;
-		}
-		else
-		{
+			else
+			{
+				; /*	El padre solo espera conexiones	*/
+			}
 
 		}
-
+		/*	Timeout del select	*/
+		SCH_FLAG = 0;
+		pthread_mutex_lock(&EOF_lock);
 	}
-
+	printf("Cerrando servidor y conexiones restantes.\n");
+	sleep(1);
+	for(ctrl = 3; ctrl <= maxfd; ctrl++)
+	{
+		close(ctrl);
+	}
 	return 0;
 }
