@@ -4,7 +4,7 @@ RM:= rm
 CC:= gcc
 CFLAGS := -Wall -g
 
-OBJETOS = main.o
+OBJETOS = main.o Subs_Reads.o
 
 all : Subs_Server
 
@@ -22,4 +22,3 @@ Subs_Server : $(OBJETOS)
 
 clean : 
 	$(RM) Subs_Server $(OBJETOS)
-
