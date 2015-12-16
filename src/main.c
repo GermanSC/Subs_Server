@@ -28,8 +28,8 @@ int EOF_FLAG = 0;
 int SCH_FLAG = 0;
 char path[40] = "";
 
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t EOF_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lock		= PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t EOF_lock	= PTHREAD_MUTEX_INITIALIZER;
 
 /*	Funcion de manejo de señal	*/
 static void sigchld_hdl (int sig)
@@ -38,9 +38,9 @@ static void sigchld_hdl (int sig)
 	pid_t pid = 0;
 	while ((pid = waitpid(-1, &stat, WNOHANG)) > 0){
 
-	printf("Conexión finalizada en socket: %d\n",WEXITSTATUS(stat));
+	printf("Conexión finalizada en socket: %d\n", WEXITSTATUS(stat));
 	pthread_mutex_lock(&lock);
-		FD_CLR(WEXITSTATUS(stat),&lista_clientes);
+		FD_CLR(WEXITSTATUS(stat), &lista_clientes);
 		close(WEXITSTATUS(stat));
 	pthread_mutex_unlock(&lock);
 	}
@@ -70,7 +70,7 @@ void* hiloLector(void ){
 	sub_struct Current_Line;
 
 	FILE* sub;
-	sub		=	fopen(path,"r");
+	sub		=	fopen(path, "r");
 	if(sub == NULL)
 	{
 		printf("Error de apertura de subtitulos (Ruta especificada: %s).\n\n", path);
@@ -86,11 +86,11 @@ void* hiloLector(void ){
 
 		ctrl = leerSubs( sub, (Current_Line.Text), &(Current_Line.sec_in),
 								&(Current_Line.sec_out),&(Current_Line.mill_in),
-								&(Current_Line.mill_out),(Current_Line.linea));
+								&(Current_Line.mill_out),(Current_Line.linea)
+								);
 		if(ctrl == -10)
 		{
 			printf("> Fin de archivo.\n");
-			sleep(1);
 			pthread_mutex_lock(&lock);
 			for(j = 4; j <= maxfd; j++)
 			{
@@ -126,12 +126,12 @@ void* hiloLector(void ){
 		tv.tv_usec = delta_mil * 1000;
 
 		/*	Espero a al tiempo de entrada del subtitulo	*/
-		select(0,NULL,NULL,NULL,&tv);
+		select(0, NULL, NULL, NULL, &tv);
 
 		pthread_mutex_lock(&lock);
 		for(j = 4; j <= maxfd; j++)
 		{
-			if (FD_ISSET(j, &lista_clientes))
+			if (FD_ISSET(j, &lista_clientes) != 0)
 			{
 				if (send(j, Current_Line.Text, strlen(Current_Line.Text), 0) == -1)
 				{
@@ -159,13 +159,13 @@ void* hiloLector(void ){
 		tv.tv_sec = delta_sec;
 		tv.tv_usec = delta_mil * 1000;
 
-		select(0,NULL,NULL,NULL,&tv);
+		select(0, NULL, NULL, NULL, &tv);
 		pthread_mutex_lock(&lock);
 		for(j = 4; j <= maxfd; j++)
 		{
-			if (FD_ISSET(j, &lista_clientes))
+			if (FD_ISSET(j, &lista_clientes) != 0)
 			{
-				if (send(j,"\n\n\n\n\n", 5, 0) == -1)
+				if (send(j, "\n\n\n\n\n", 5, 0) == -1)
 				{
 					printf("Error al enviar mensajes.\n\n");
 					pthread_mutex_lock(&EOF_lock);
@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
 
 	/*	Seteo del socket	*/
 
-	sock_srv = socket(PF_INET,SOCK_STREAM,0);
+	sock_srv = socket(PF_INET, SOCK_STREAM, 0);
 	if( sock_srv < 0 )	/*	Error de socket	*/
 	{
 		printf("Error en la apertura del socket.\n\n");
@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 	srv_addr.sin_port		= htons(port);
 	srv_addr.sin_addr.s_addr= 0;
 
-	ctrl = bind(sock_srv,(struct sockaddr*)&srv_addr,sizeof (struct sockaddr_in));
+	ctrl = bind(sock_srv, (struct sockaddr*)&srv_addr, sizeof (struct sockaddr_in));
 	if(ctrl == -1)	/*	Error del bind	*/
 	{
 		printf("Error al enlazar el socket.\n\n");
@@ -239,7 +239,7 @@ int main(int argc, char *argv[])
 
 	printf("Esperando conexiones...\n");
 
-	ctrl = listen(sock_srv,10);
+	ctrl = listen(sock_srv, 10);
 
 	/*	configuro el select	*/
 
@@ -248,8 +248,7 @@ int main(int argc, char *argv[])
 
 	strcpy(path,argv[1]);
 	pthread_t hilo_Lect;
-	pthread_create(&hilo_Lect,NULL,(void*)&hiloLector,NULL);
-	sleep(1);
+	pthread_create(&hilo_Lect, NULL, (void*)&hiloLector, NULL);
 
 	/*	Accept timeout	*/
 	struct timeval acctv;
@@ -260,13 +259,13 @@ int main(int argc, char *argv[])
 	while (EOF_FLAG == 0)
 	{
 		pthread_mutex_unlock(&EOF_lock);
-		FD_SET(sock_srv,&Listen);
+		FD_SET(sock_srv, &Listen);
 		acctv.tv_sec = 1;
-		select(sock_srv+1,&Listen,NULL,NULL,&acctv);
+		select(sock_srv+1, &Listen, NULL, NULL, &acctv);
 		pthread_mutex_lock(&EOF_lock);
 		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0 && EOF_FLAG == 0)
 		{	/*	Nueva conexión	*/
-			nuevofd = accept(sock_srv,(struct sockaddr *)&client_info,&client_len);
+			nuevofd = accept(sock_srv, (struct sockaddr *)&client_info, &client_len);
 			if(nuevofd < 0)
 			{
 				printf("Error al aceptar la conexión.\n\n");
@@ -283,21 +282,20 @@ int main(int argc, char *argv[])
 			{
 				maxfd = nuevofd;
 			}
-			FD_SET(nuevofd,&lista_clientes);
+			FD_SET(nuevofd, &lista_clientes);
 			pthread_mutex_unlock(&lock);
 
 			if(fork() == 0)
 			{	/*	Procesos hijo, administran conexiones	*/
 				fd_set readfd;
 				FD_ZERO(&readfd);
-				FD_SET(nuevofd,&readfd);
+				FD_SET(nuevofd, &readfd);
 				struct timeval timeout;
 				timeout.tv_sec = 4;
 				timeout.tv_usec = 0;
 
 				close(sock_srv);
-				write(nuevofd,"RDY_CMD",7);
-				sleep(1);
+				write(nuevofd, "RDY_CMD", 7);
 
 				ctrl = 1;
 				char test[13]="";
@@ -306,8 +304,8 @@ int main(int argc, char *argv[])
 					timeout.tv_sec = 4;
 					timeout.tv_usec = 0;
 					FD_SET(nuevofd,&readfd);
-					select(nuevofd+1,&readfd,NULL,NULL,&timeout);
-					if(FD_ISSET(nuevofd,&readfd))
+					select(nuevofd+1, &readfd, NULL, NULL, &timeout);
+					if(FD_ISSET(nuevofd, &readfd) != 0 )
 					{
 						ctrl = read(nuevofd,test,13);
 					}
@@ -330,10 +328,13 @@ int main(int argc, char *argv[])
 
 	}
 	printf("Cerrando servidor y conexiones restantes.\n");
-	sleep(1);
 	for(ctrl = 3; ctrl <= maxfd; ctrl++)
 	{
 		close(ctrl);
+	}
+	while ((waitpid(-1, NULL, WNOHANG)) > 0)
+	{
+		;
 	}
 	return 0;
 }
