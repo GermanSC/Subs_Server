@@ -185,6 +185,11 @@ int main(int argc, char *argv[])
 	/*	Variables de control	*/
 
 	int		ctrl	=	0;
+	pthread_t hilo_Lect;
+
+	fd_set Listen;
+	struct timeval acctv;
+
 
 	/*	Variables de Conexión	*/
 	int		port	=	15002;
@@ -193,6 +198,7 @@ int main(int argc, char *argv[])
 	struct	sockaddr_in	client_info;
 	unsigned int client_len = sizeof(struct sockaddr_in);
 	char clientIP[INET_ADDRSTRLEN];
+	int yes = 1;
 
 	if(argc < 2)
 	{
@@ -222,7 +228,6 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	int yes = 1;
 	setsockopt(sock_srv, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 
 	srv_addr.sin_family		= AF_INET;
@@ -242,17 +247,11 @@ int main(int argc, char *argv[])
 	ctrl = listen(sock_srv, 10);
 
 	/*	configuro el select	*/
-
 	maxfd = sock_srv;
 	FD_ZERO(&lista_clientes);
 
 	strcpy(path,argv[1]);
-	pthread_t hilo_Lect;
 	pthread_create(&hilo_Lect, NULL, (void*)&hiloLector, NULL);
-
-	/*	Accept timeout	*/
-	struct timeval acctv;
-	fd_set Listen;
 
 	/*	Comunicacion con los hijos	*/
 	pthread_mutex_lock(&EOF_lock);
@@ -287,6 +286,7 @@ int main(int argc, char *argv[])
 
 			if(fork() == 0)
 			{	/*	Procesos hijo, administran conexiones	*/
+				char test[13]="";
 				fd_set readfd;
 				FD_ZERO(&readfd);
 				FD_SET(nuevofd, &readfd);
@@ -298,7 +298,6 @@ int main(int argc, char *argv[])
 				write(nuevofd, "RDY_CMD", 7);
 
 				ctrl = 1;
-				char test[13]="";
 				while(ctrl > 0)
 				{
 					timeout.tv_sec = 4;
