@@ -180,6 +180,37 @@ void* hiloLector(void ){
 	return NULL;
 }
 
+int funcionHijo(int client_socket)
+{
+	char test[13]="";
+	fd_set readfd;
+	FD_ZERO(&readfd);
+	FD_SET(client_socket, &readfd);
+	struct timeval timeout;
+	timeout.tv_sec = 4;
+	timeout.tv_usec = 0;
+	int temp = 1;
+
+	write(client_socket, "RDY_CMD", 7);
+	while(temp > 0)
+	{
+		timeout.tv_sec = 4;
+		timeout.tv_usec = 0;
+		FD_SET(client_socket,&readfd);
+		select(client_socket+1, &readfd, NULL, NULL, &timeout);
+		if(FD_ISSET(client_socket, &readfd) != 0 )
+		{
+			temp = read(client_socket,test,13);
+		}
+		else
+		{
+			break;
+		}
+	}
+	close(client_socket);
+	return client_socket;
+}
+
 int main(int argc, char *argv[])
 {
 	/*	Variables de control	*/
@@ -286,34 +317,8 @@ int main(int argc, char *argv[])
 
 			if(fork() == 0)
 			{	/*	Procesos hijo, administran conexiones	*/
-				char test[13]="";
-				fd_set readfd;
-				FD_ZERO(&readfd);
-				FD_SET(nuevofd, &readfd);
-				struct timeval timeout;
-				timeout.tv_sec = 4;
-				timeout.tv_usec = 0;
-
 				close(sock_srv);
-				write(nuevofd, "RDY_CMD", 7);
-
-				ctrl = 1;
-				while(ctrl > 0)
-				{
-					timeout.tv_sec = 4;
-					timeout.tv_usec = 0;
-					FD_SET(nuevofd,&readfd);
-					select(nuevofd+1, &readfd, NULL, NULL, &timeout);
-					if(FD_ISSET(nuevofd, &readfd) != 0 )
-					{
-						ctrl = read(nuevofd,test,13);
-					}
-					else
-					{
-						break;
-					}
-				}
-				close(nuevofd);
+				ctrl = funcionHijo(nuevofd);
 				return nuevofd;
 			}
 			else
