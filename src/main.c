@@ -211,6 +211,35 @@ int funcionHijo(int client_socket)
 	return client_socket;
 }
 
+int socketSetUp(int puerto)
+{
+	int sock = -1;
+	struct	sockaddr_in	srv_addr;
+	int yes = 1;
+
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if( sock < 0 )	/*	Error de socket	*/
+	{
+		printf("Error en la apertura del socket.\n\n");
+		return -1;
+	}
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+
+	srv_addr.sin_family		= AF_INET;
+	srv_addr.sin_port		= htons(puerto);
+	srv_addr.sin_addr.s_addr= 0;
+
+	yes = bind(sock, (struct sockaddr*)&srv_addr, sizeof (struct sockaddr_in));
+	if(yes == -1)	/*	Error del bind	*/
+	{
+		printf("Error al enlazar el socket.\n\n");
+		close(sock);
+		return -1;
+	}
+	return sock;
+}
+
 int main(int argc, char *argv[])
 {
 	/*	Variables de control	*/
@@ -221,15 +250,12 @@ int main(int argc, char *argv[])
 	fd_set Listen;
 	struct timeval acctv;
 
-
 	/*	Variables de Conexión	*/
 	int		port	=	15002;
-	int		sock_srv, nuevofd;
-	struct	sockaddr_in	srv_addr;
+	int sock_srv, nuevofd;
 	struct	sockaddr_in	client_info;
 	unsigned int client_len = sizeof(struct sockaddr_in);
 	char clientIP[INET_ADDRSTRLEN];
-	int yes = 1;
 
 	if(argc < 2)
 	{
@@ -252,26 +278,7 @@ int main(int argc, char *argv[])
 
 	/*	Seteo del socket	*/
 
-	sock_srv = socket(PF_INET, SOCK_STREAM, 0);
-	if( sock_srv < 0 )	/*	Error de socket	*/
-	{
-		printf("Error en la apertura del socket.\n\n");
-		return -1;
-	}
-
-	setsockopt(sock_srv, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-
-	srv_addr.sin_family		= AF_INET;
-	srv_addr.sin_port		= htons(port);
-	srv_addr.sin_addr.s_addr= 0;
-
-	ctrl = bind(sock_srv, (struct sockaddr*)&srv_addr, sizeof (struct sockaddr_in));
-	if(ctrl == -1)	/*	Error del bind	*/
-	{
-		printf("Error al enlazar el socket.\n\n");
-		close(sock_srv);
-		return -1;
-	}
+	sock_srv = socketSetUp(port);
 
 	printf("Esperando conexiones...\n");
 
@@ -284,7 +291,6 @@ int main(int argc, char *argv[])
 	strcpy(path,argv[1]);
 	pthread_create(&hilo_Lect, NULL, (void*)&hiloLector, NULL);
 
-	/*	Comunicacion con los hijos	*/
 	pthread_mutex_lock(&EOF_lock);
 	while (EOF_FLAG == 0)
 	{
