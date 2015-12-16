@@ -240,6 +240,28 @@ int socketSetUp(int puerto)
 	return sock;
 }
 
+int socketAccept(int server_sock)
+{
+	int sock;
+	struct	sockaddr_in	client_info;
+	unsigned int client_len = sizeof(struct sockaddr_in);
+	char clientIP[INET_ADDRSTRLEN];
+
+	sock = accept(server_sock, (struct sockaddr *)&client_info, &client_len);
+	if(sock < 0)
+	{
+		printf("Error al aceptar la conexión.\n\n");
+		close(server_sock);
+		return -1;
+	}
+
+	printf("Nueva conexión desde: %s asignada a socket: %d\n"
+			,inet_ntop(AF_INET,&(client_info.sin_addr),clientIP, INET_ADDRSTRLEN)
+			,sock);
+
+	return sock;
+}
+
 int main(int argc, char *argv[])
 {
 	/*	Variables de control	*/
@@ -253,9 +275,6 @@ int main(int argc, char *argv[])
 	/*	Variables de Conexión	*/
 	int		port	=	15002;
 	int sock_srv, nuevofd;
-	struct	sockaddr_in	client_info;
-	unsigned int client_len = sizeof(struct sockaddr_in);
-	char clientIP[INET_ADDRSTRLEN];
 
 	if(argc < 2)
 	{
@@ -295,23 +314,17 @@ int main(int argc, char *argv[])
 	while (EOF_FLAG == 0)
 	{
 		pthread_mutex_unlock(&EOF_lock);
+
 		FD_SET(sock_srv, &Listen);
 		acctv.tv_sec = 1;
 		select(sock_srv+1, &Listen, NULL, NULL, &acctv);
-		pthread_mutex_lock(&EOF_lock);
-		if(FD_ISSET(sock_srv,&Listen) && SCH_FLAG == 0 && EOF_FLAG == 0)
-		{	/*	Nueva conexión	*/
-			nuevofd = accept(sock_srv, (struct sockaddr *)&client_info, &client_len);
-			if(nuevofd < 0)
-			{
-				printf("Error al aceptar la conexión.\n\n");
-				close(sock_srv);
-				return -1;
-			}
 
-			printf("Nueva conexión desde: %s asignada a socket: %d\n"
-					,inet_ntop(AF_INET,&(client_info.sin_addr),clientIP, INET_ADDRSTRLEN)
-					,nuevofd);
+		pthread_mutex_lock(&EOF_lock);
+
+		if( (FD_ISSET(sock_srv,&Listen) != 0) && (SCH_FLAG == 0) && (EOF_FLAG == 0) )
+		{
+			/*	Nueva conexión	*/
+			nuevofd = socketAccept(sock_srv);
 
 			pthread_mutex_lock(&lock);
 			if(nuevofd > maxfd)
