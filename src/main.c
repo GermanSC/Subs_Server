@@ -9,6 +9,10 @@
  ============================================================================
  */
 
+/*
+*/
+
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +29,7 @@
 int maxfd;
 fd_set	lista_clientes;
 int EOF_FLAG = 0;
-int SCH_FLAG = 0;
+//int SCH_FLAG = 0;
 char path[40] = "";
 
 pthread_mutex_t lock		= PTHREAD_MUTEX_INITIALIZER;
@@ -44,7 +48,7 @@ static void sigchld_hdl (int sig)
 		close(WEXITSTATUS(stat));
 	pthread_mutex_unlock(&lock);
 	}
-	SCH_FLAG = 1;
+//	SCH_FLAG = 1;
 }
 
 void* hiloLector(void ){
@@ -317,11 +321,14 @@ int main(int argc, char *argv[])
 
 		FD_SET(sock_srv, &Listen);
 		acctv.tv_sec = 1;
-		select(sock_srv+1, &Listen, NULL, NULL, &acctv);
+
+		do{
+			ctrl = select(sock_srv+1, &Listen, NULL, NULL, &acctv);
+		}while( ctrl == -1 && errno == EINTR );
 
 		pthread_mutex_lock(&EOF_lock);
 
-		if( (FD_ISSET(sock_srv,&Listen) != 0) && (SCH_FLAG == 0) && (EOF_FLAG == 0) )
+		if( (FD_ISSET(sock_srv,&Listen) != 0) && (EOF_FLAG == 0) )
 		{
 			/*	Nueva conexión	*/
 			nuevofd = socketAccept(sock_srv);
@@ -347,7 +354,6 @@ int main(int argc, char *argv[])
 
 		}
 		/*	Timeout del select	*/
-		SCH_FLAG = 0;
 
 	}
 	printf("Cerrando servidor y conexiones restantes.\n");

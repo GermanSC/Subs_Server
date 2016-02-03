@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MAX_LINE 100
+
 int	leerSubs( FILE * file, char* TEXT, int* SEC_IN, int* SEC_OUT, int* MIL_IN, int* MIL_OUT,  char* LINE)
 {
 	char* read_ctrl;
@@ -28,7 +30,7 @@ int	leerSubs( FILE * file, char* TEXT, int* SEC_IN, int* SEC_OUT, int* MIL_IN, i
 	while(strcmp(aux_line,"")!=13 && read_ctrl != NULL )
 	{
 		strcat(TEXT,aux_line);
-		read_ctrl = fgets(aux_line,100,file);
+		read_ctrl = fgets(aux_line,MAX_LINE,file);
 	}
 
 	if(read_ctrl == NULL)
